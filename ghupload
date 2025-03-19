@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env py
 # -*- coding: utf-8 -*-
 # vim: set fileencoding=utf-8 :
 # vim: set syntax=python :
@@ -9,6 +9,7 @@ import base64
 import json
 import os
 import re
+import ssl
 import subprocess
 import urllib.request
 
@@ -53,7 +54,18 @@ def _get_comitter() -> dict:
         "name": user,
         "email": email,
     }
-    
+
+
+def _get_security_context():
+    ca_bundle = os.environ.get("SSL_CERT_FILE")
+    print(f"{ca_bundle=}")
+    if ca_bundle:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.load_verify_locations(ca_bundle)
+        return context
+    else:
+        return None
+
 
 def _get_file_info(file_path: str, branch: str | None) -> dict | None:
     url = _get_endpoint(file_path)
@@ -62,8 +74,9 @@ def _get_file_info(file_path: str, branch: str | None) -> dict | None:
 
     headers = _get_headers()
     req = urllib.request.Request(url, headers=headers)
+    context = _get_security_context()
     try:
-        with urllib.request.urlopen(req) as res:
+        with urllib.request.urlopen(req, context=context) as res:
             response_json = json.load(res)
             print(f"{response_json=}")
             return response_json
@@ -78,9 +91,9 @@ def _get_file_info(file_path: str, branch: str | None) -> dict | None:
 def _upload_file_content(file_path: str, branch: str | None, message: str):
     file_info = _get_file_info(file_path, branch)
 
-    with open(file_path, "r") as file:
-        # get base64 encoded content
-        content = file.read().encode("utf-8")
+    with open(file_path, "rb") as file:
+        # Get base64 encoded content for binary or text files
+        content = file.read()
         base64_content = base64.b64encode(content).decode("utf-8")
 
     url = _get_endpoint(file_path)
@@ -104,7 +117,8 @@ def _upload_file_content(file_path: str, branch: str | None, message: str):
     req = urllib.request.Request(
         url, json.dumps(request_body).encode(), headers, method="PUT"
     )
-    with urllib.request.urlopen(req) as res:
+    context = _get_security_context()
+    with urllib.request.urlopen(req, context=context) as res:
         response_body = res.read()
         print(f"{res.status=}")
         print(f"{res.reason=}")
